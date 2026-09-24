@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+# -*-coding:utf8-*-
+"""Relay joint states/commands between ros2_control and Isaac Sim.
+
+ros2_control models the gripper as a single virtual joint ``gripper`` (0..0.1 m)
+whose fingers mimic it with multipliers 0.5 / -0.5, while the Isaac Sim
+articulation exposes the two fingers directly as ``joint7`` (0..0.05) and
+``joint8`` (-0.05..0). All other joints pass through unchanged.
+"""
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import JointState
+
+
+class IsaacGripperRelay(Node):
+    def __init__(self):
+        super().__init__("isaac_gripper_relay")
+        self.declare_parameter("isaac_states_topic", "/isaac_joint_states")
+        self.declare_parameter("isaac_commands_topic", "/isaac_joint_commands")
+        self.declare_parameter("ros2c_states_topic", "/ros2c_joint_states")
+        self.declare_parameter("ros2c_commands_topic", "/ros2c_joint_commands")
+        self.declare_parameter("gripper_joint", "gripper")
+        self.declare_parameter("finger_joints", ["joint7", "joint8"])
+        self.declare_parameter("finger_multipliers", [0.5, -0.5])
+        # Must match the state interfaces declared in agx_arm.ros2_control.xacro:
+        # JointStateTopicSystem throws on fields without a matching state interface.
+        self.declare_parameter("state_fields", ["position", "velocity"])
+
+        self.gripper = self.get_parameter("gripper_joint").value
+        self.fingers = list(self.get_parameter("finger_joints").value)
+        self.multipliers = list(self.get_parameter("finger_multipliers").value)
+        self.state_fields = list(self.get_parameter("state_fields").value)
+
+        self._states_pub = self.create_publisher(
+            JointState, self.get_parameter("ros2c_states_topic").value, 10
+        )
+        self._commands_pub = self.create_publisher(
+            JointState, self.get_parameter("isaac_commands_topic").value, 10
+        )
+        # Best-effort subscription matches both reliable and best-effort publishers.
+        self.create_subscription(
+            JointState,
+            self.get_parameter("isaac_states_topic").value,
+            self._on_isaac_states,
+            qos_profile_sensor_data,
+        )
+        self.create_subscription(
+            JointState,
+            self.get_parameter("ros2c_commands_topic").value,
+            self._on_ros2c_commands,
+            10,
+        )
+
+    @staticmethod
+    def _fields(msg):
+        """Return the non-empty per-joint arrays of a JointState message."""
+        n = len(msg.name)
+        return [f for f in ("position", "velocity", "effort") if len(getattr(msg, f)) == n]
+
+    def _on_isaac_states(self, msg):
+        """Isaac -> ros2_control: collapse the finger joints into the gripper joint."""
+        fields = [f for f in self._fields(msg) if f in self.state_fields]
+        out = JointState(header=msg.header)
+        finger_values = {}
+        for i, name in enumerate(msg.name):
+            if name in self.fingers:
+                finger_values[name] = {f: getattr(msg, f)[i] for f in fields}
+                continue
+            out.name.append(name)
+            for f in fields:
+                getattr(out, f).append(getattr(msg, f)[i])
+
+        if len(finger_values) == len(self.fingers):
+            out.name.append(self.gripper)
+            for f in fields:
+                # gripper = sum(finger / multiplier) / n_fingers
+                value = sum(
+                    finger_values[j][f] / m for j, m in zip(self.fingers, self.multipliers)
+                ) / len(self.fingers)
+                getattr(out, f).append(value)
+        self._states_pub.publish(out)
+
+    def _on_ros2c_commands(self, msg):
+        """ros2_control -> Isaac: expand the gripper joint into the finger joints."""
+        fields = self._fields(msg)
+        out = JointState(header=msg.header)
+        for i, name in enumerate(msg.name):
+            if name == self.gripper:
+                for j, m in zip(self.fingers, self.multipliers):
+                    out.name.append(j)
+                    for f in fields:
+                        getattr(out, f).append(m * getattr(msg, f)[i])
+                continue
+            out.name.append(name)
+            for f in fields:
+                getattr(out, f).append(getattr(msg, f)[i])
+        self._commands_pub.publish(out)
+
+
+def main():
+    rclpy.init()
+    node = IsaacGripperRelay()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

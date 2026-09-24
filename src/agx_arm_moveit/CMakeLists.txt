@@ -8,5 +8,6 @@ ament_package()
 install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS
   scripts/agx_arm_control_gate
+  scripts/isaac_gripper_relay
   DESTINATION lib/${PROJECT_NAME}
 )

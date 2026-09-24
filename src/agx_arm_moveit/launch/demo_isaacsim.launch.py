@@ -5,6 +5,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import yaml
+from _moveit_config_builder import (
+    ALL_ARM_TYPES,
+    ALL_EFFECTOR_TYPES,
+    ALL_REVO2_TYPES,
+    build_moveit_config,
+)
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -15,15 +21,10 @@ from launch.actions import (
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node, PushRosNamespace, SetRemap
+from launch.substitutions.path_join_substitution import PathJoinSubstitution
+from launch_ros.actions import Node, PushRosNamespace, SetParameter, SetRemap
+from launch_ros.substitutions import FindPackageShare
 from moveit_configs_utils.launch_utils import DeclareBooleanLaunchArg
-
-from _moveit_config_builder import (
-    ALL_ARM_TYPES,
-    ALL_EFFECTOR_TYPES,
-    ALL_REVO2_TYPES,
-    build_moveit_config,
-)
 
 
 def _build_ros2_controllers_file(arm_type, effector_type, revo2_type, namespace):
@@ -140,9 +141,7 @@ def _build_moveit(context):
 
     actions.append(
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                str(package_path / "launch/rsp.launch.py")
-            )
+            PythonLaunchDescriptionSource(str(package_path / "launch/rsp.launch.py"))
         )
     )
 
@@ -176,7 +175,9 @@ def _build_moveit(context):
                 str(package_path / "launch/moveit_rviz.launch.py")
             ),
             launch_arguments={
-                "rviz_config": _build_namespaced_moveit_rviz_config(package_path, namespace),
+                "rviz_config": _build_namespaced_moveit_rviz_config(
+                    package_path, namespace
+                ),
             }.items(),
             condition=IfCondition(LaunchConfiguration("use_rviz")),
         )
@@ -206,6 +207,15 @@ def _build_moveit(context):
         )
     )
 
+    # Maps the virtual `gripper` joint <-> Isaac finger joints `joint7`/`joint8`
+    actions.append(
+        Node(
+            package="agx_arm_moveit",
+            executable="isaac_gripper_relay",
+            output="screen",
+        )
+    )
+
     actions.append(
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -226,8 +236,21 @@ def _build_moveit(context):
 
 
 def generate_launch_description():
+
+    ros2_controller_config = PathJoinSubstitution(
+        [FindPackageShare("agx_arm_moveit"), "config", "ros2_controllers.yaml"]
+    )
+    ros2_controller_node = Node(
+        package="controller_manager",
+        executable="ros2_control_node",
+        parameters=[ros2_controller_config],
+        output="both",
+    )
     return LaunchDescription(
         [
+            # SetParameter(name="use_sim_time", value=True),
+            # ros2_controller_node,
+
             DeclareLaunchArgument(
                 "namespace",
                 default_value="",
