@@ -264,6 +264,13 @@ def generate_launch_description():
                 "true: move_group subscribes to feedback_topic; "
                 "false: subscribes to control_topic (mock hardware).",
             ),
+            DeclareLaunchArgument(
+                "use_mock_hardware",
+                default_value="true",
+                choices=["true", "false"],
+                description="true: mock_components/GenericSystem (RViz only); "
+                "false: JointStateTopicSystem talking to Isaac Sim over /ros2c_joint_*.",
+            ),
             DeclareBooleanLaunchArg(
                 "db",
                 default_value=False,

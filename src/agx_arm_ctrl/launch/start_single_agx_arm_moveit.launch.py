@@ -190,6 +190,9 @@ def generate_launch_description():
             'control_topic': LaunchConfiguration('control_topic'),
             'auto_control_gate': LaunchConfiguration('auto_control_gate'),
             'control_gate_service': LaunchConfiguration('control_gate_service'),
+            # Real arm: mock ros2_control echoes MoveIt's commands onto control/joint_states,
+            # which agx_arm_ctrl forwards over CAN (never the Isaac Sim topic hardware).
+            'use_mock_hardware': 'true',
         }.items(),
     )
 

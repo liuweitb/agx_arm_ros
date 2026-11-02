@@ -83,6 +83,9 @@ def build_moveit_config(context):
         "revo2_type": revo2_type,
         "tcp_offset_xyz": f"{tcp_offset[0]} {tcp_offset[1]} {tcp_offset[2]}",
         "tcp_offset_rpy": f"{tcp_offset[3]} {tcp_offset[4]} {tcp_offset[5]}",
+        "use_mock_hardware": LaunchConfiguration(
+            "use_mock_hardware", default="false"
+        ).perform(context),
     }
     srdf_mappings = {
         "arm_type": arm_type,

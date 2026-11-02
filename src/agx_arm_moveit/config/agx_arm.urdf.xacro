@@ -6,6 +6,7 @@
   <xacro:arg name="initial_positions_file" default="initial_positions.yaml" />
   <xacro:arg name="tcp_offset_xyz" default="0 0 0" />
   <xacro:arg name="tcp_offset_rpy" default="0 0 0" />
+  <xacro:arg name="use_mock_hardware" default="false" />
 
   <xacro:property name="arm_type" value="$(arg arm_type)" />
   <xacro:property name="flange_link" value="${'link7' if arm_type == 'nero' else 'link6'}" />
@@ -49,5 +50,6 @@
     arm_type="$(arg arm_type)"
     effector_type="$(arg effector_type)"
     revo2_type="$(arg revo2_type)"
+    use_mock_hardware="$(arg use_mock_hardware)"
   />
 </robot>
